@@ -1,9 +1,9 @@
-#!/bin/bash
+!/bin/bash
 ################################################################################
-# Script for installing Odoo on Ubuntu 14.04, 15.04, 16.04 and 18.04 (could be used for other version too)
+# Script for installing Odoo on Ubuntu 22.04 (could be used for other version too)
 # Author: Yenthe Van Ginneken
 #-------------------------------------------------------------------------------
-# This script will install Odoo on your Ubuntu 16.04 server. It can install multiple Odoo instances
+# This script will install Odoo on your Ubuntu 22.04 server. It can install multiple Odoo instances
 # in one Ubuntu because of the different xmlrpc_ports
 #-------------------------------------------------------------------------------
 # Make a new file:
@@ -32,27 +32,16 @@ INSTALL_NGINX="True"
 # Set the superadmin password - if GENERATE_RANDOM_PASSWORD is set to "True" we will automatically generate a random password, otherwise we use this one
 OE_SUPERADMIN="admin"
 # Set to "True" to generate a random password, "False" to use the variable in OE_SUPERADMIN
-GENERATE_RANDOM_PASSWORD="False"
+GENERATE_RANDOM_PASSWORD="True"
 OE_CONFIG="${OE_USER}-server"
 # Set the website name
 WEBSITE_NAME="http://216.126.231.159"
 # Set the default Odoo longpolling port (you still have to use -c /etc/odoo-server.conf for example to use this.)
 LONGPOLLING_PORT="8072"
 # Set to "True" to install certbot and have ssl enabled, "False" to use http
-ENABLE_SSL="True"
+ENABLE_SSL="False"
 # Provide Email to register ssl certificate
 ADMIN_EMAIL="ayamkentz@gmail.com"
-
-# Set Custom Modules
-OCA="True"
-SAAS="True"
-CybroOdoo="True"
-MuKIT="True"
-SythilTech="True"
-odoomates="True"
-openeducat="True"
-Openworx="True"
-JayVoraSerpentCS="True"
 ##
 ###  WKHTMLTOPDF download links
 ## === Ubuntu Trusty x64 & x32 === (for other distributions please replace these two links,
@@ -60,61 +49,80 @@ JayVoraSerpentCS="True"
 ## https://github.com/odoo/odoo/wiki/Wkhtmltopdf ):
 ## https://www.odoo.com/documentation/13.0/setup/install.html#debian-ubuntu
 
-WKHTMLTOX_X64="https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.5/wkhtmltox_0.12.5-1.$(lsb_release -c -s)_amd64.deb"
-WKHTMLTOX_X32="https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.5/wkhtmltox_0.12.5-1.$(lsb_release -c -s)_i386.deb"
+WKHTMLTOX_X64=https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-2/wkhtmltox_0.12.6.1-2.jammy_amd64.deb
+
 #--------------------------------------------------
 # Update Server
 #--------------------------------------------------
 echo -e "\n---- Update Server ----"
 # universe package is for Ubuntu 18.x
-sudo add-apt-repository universe
+#sudo add-apt-repository universe
 # libpng12-0 dependency for wkhtmltopdf
-# sudo add-apt-repository "deb http://mirrors.kernel.org/ubuntu/ xenial main"
+#sudo add-apt-repository "deb http://mirrors.kernel.org/ubuntu/ xenial main"
+echo "deb http://security.ubuntu.com/ubuntu focal-security main" | sudo tee /etc/apt/sources.list.d/focal-security.list
 sudo apt-get update
 sudo apt-get upgrade -y
-sudo apt-get install libpq-dev
-
+sudo apt install curl ca-certificates gnupg2 lsb-release ubuntu-keyring -y
 #--------------------------------------------------
 # Install PostgreSQL Server
 #--------------------------------------------------
-#echo -e "\n---- Install PostgreSQL Server ----"
-#sudo apt-get install postgresql postgresql-server-dev-all -y
+echo -e "\n---- Install PostgreSQL Server ----"
+sudo curl https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/apt.postgresql.org.gpg >/dev/null
 
-#echo -e "\n---- Creating the ODOO PostgreSQL User  ----"
-#sudo su - postgres -c "createuser -s $OE_USER" 2> /dev/null || true
+sudo sh -c 'echo "deb [arch=amd64] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+
+sudo apt-get update
+sudo apt-get install postgresql postgresql-server-dev-all postgis -y
+
+echo -e "\n---- Creating the ODOO PostgreSQL User  ----"
+sudo su - postgres -c "createuser -s $OE_USER" 2> /dev/null || true
 
 #--------------------------------------------------
 # Install Dependencies
 #--------------------------------------------------
 echo -e "\n--- Installing Python 3 + pip3 --"
-sudo apt-get install python3 python3-pip
-sudo apt-get install git python3-cffi build-essential wget python3-dev python3-venv python3-wheel libxslt-dev libzip-dev libldap2-dev libsasl2-dev python3-setuptools node-less libpng-dev libjpeg-dev gdebi -y
+sudo apt-get install git python3 python3-pip build-essential wget python3-dev python3-venv python3-wheel python3-cffi libssl1.1 libxslt1-dev libzip-dev libldap2-dev libsasl2-dev python3-setuptools node-less libpng-dev libjpeg-dev gdebi -y
+
+echo -e "\n--- upgrading Python 3 + pip3 --"
+sudo pip3 install --upgrade pip
+sudo pip3 install html2text
 
 echo -e "\n---- Install python packages/requirements ----"
 sudo -H pip3 install -r https://github.com/odoo/odoo/raw/${OE_VERSION}/requirements.txt
 
 echo -e "\n---- Installing nodeJS NPM and rtlcss for LTR support ----"
-sudo apt-get install nodejs npm -y
+sudo apt-get install nodejs -y
 sudo npm install -g rtlcss
+
+#--------------------------------------------------
+# Install Bangla fonts
+#--------------------------------------------------
+echo -e "\n---- Installing Lohit Bengali font. ----"
+sudo apt install fonts-beng -y
+
+
 
 #--------------------------------------------------
 # Install Wkhtmltopdf if needed
 #--------------------------------------------------
-# if [ $INSTALL_WKHTMLTOPDF = "True" ]; then
-#   echo -e "\n---- Install wkhtml and place shortcuts on correct place for ODOO 13 ----"
-#   #pick up correct one from x64 & x32 versions:
-#   if [ "`getconf LONG_BIT`" == "64" ];then
-#       _url=$WKHTMLTOX_X64
-#   else
-#       _url=$WKHTMLTOX_X32
-#   fi
-#   sudo wget $_url
-#   sudo gdebi --n `basename $_url`
-sudo ln -s /usr/local/bin/wkhtmltopdf /usr/bin
-sudo ln -s /usr/local/bin/wkhtmltoimage /usr/bin
-# else
-#   echo "Wkhtmltopdf isn't installed due to the choice of the user!"
-# fi
+if [ $INSTALL_WKHTMLTOPDF = "True" ]; then
+    echo -e "\n---- Install wkhtml and place shortcuts on correct place for ODOO 15 ----"
+    # echo -e "\n ---- Installing libssl1.1"
+    
+    # sudo wget http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.0g-2ubuntu4_amd64.deb
+    # sudo apt install ./libssl1.1_1.1.0g-2ubuntu4_amd64.deb -y
+
+    #pick up correct one from x64 & x32 versions:
+    if [ "`getconf LONG_BIT`" == "64" ];then
+        _url=$WKHTMLTOX_X64
+    fi
+    sudo wget $_url
+    sudo gdebi --n `basename $_url`
+    sudo ln -s /usr/local/bin/wkhtmltopdf /usr/bin
+    sudo ln -s /usr/local/bin/wkhtmltoimage /usr/bin
+else
+    echo "Wkhtmltopdf isn't installed due to the choice of the user!"
+fi
 
 echo -e "\n---- Create ODOO system user ----"
 sudo adduser --system --quiet --shell=/bin/bash --home=$OE_HOME --gecos 'ODOO' --group $OE_USER
@@ -138,8 +146,8 @@ if [ $IS_ENTERPRISE = "True" ]; then
     sudo ln -s /usr/bin/nodejs /usr/bin/node
     sudo su $OE_USER -c "mkdir $OE_HOME/enterprise"
     sudo su $OE_USER -c "mkdir $OE_HOME/enterprise/addons"
-
-    GITHUB_RESPONSE=$(sudo git clone --depth 1 --branch $OE_VERSION https://www.github.com/odoo/enterprise "$OE_HOME/enterprise/addons" 2>&1)
+    GITHUB_RESPONSE="False"
+    #GITHUB_RESPONSE=$(sudo git clone --depth 1 --branch $OE_VERSION https://www.github.com/odoo/enterprise "$OE_HOME/enterprise/addons" 2>&1)
     while [[ $GITHUB_RESPONSE == *"Authentication"* ]]; do
         echo "------------------------WARNING------------------------------"
         echo "Your authentication with Github has failed! Please try again."
@@ -149,7 +157,7 @@ if [ $IS_ENTERPRISE = "True" ]; then
         echo " "
         GITHUB_RESPONSE=$(sudo git clone --depth 1 --branch $OE_VERSION https://www.github.com/odoo/enterprise "$OE_HOME/enterprise/addons" 2>&1)
     done
-
+    
     echo -e "\n---- Added Enterprise code under $OE_HOME/enterprise/addons ----"
     echo -e "\n---- Installing Enterprise specific libraries ----"
     sudo -H pip3 install num2words ofxparse dbfread ebaysdk firebase_admin pyOpenSSL
@@ -177,13 +185,14 @@ fi
 sudo su root -c "printf 'admin_passwd = ${OE_SUPERADMIN}\n' >> /etc/${OE_CONFIG}.conf"
 if [ $OE_VERSION > "11.0" ];then
     sudo su root -c "printf 'http_port = ${OE_PORT}\n' >> /etc/${OE_CONFIG}.conf"
+    sudo su root -c "printf 'gevent_port = ${LONGPOLLING_PORT}\n' >> /etc/${OE_CONFIG}.conf"
 else
     sudo su root -c "printf 'xmlrpc_port = ${OE_PORT}\n' >> /etc/${OE_CONFIG}.conf"
 fi
 sudo su root -c "printf 'logfile = /var/log/${OE_USER}/${OE_CONFIG}.log\n' >> /etc/${OE_CONFIG}.conf"
 
 if [ $IS_ENTERPRISE = "True" ]; then
-    sudo su root -c "printf 'addons_path=${OE_HOME}/enterprise/addons,${OE_HOME_EXT}/addons\n' >> /etc/${OE_CONFIG}.conf"
+    sudo su root -c "printf 'addons_path=${OE_HOME}/enterprise/addons,${OE_HOME_EXT}/addons,${OE_HOME}/custom/addons\n' >> /etc/${OE_CONFIG}.conf"
 else
     sudo su root -c "printf 'addons_path=${OE_HOME_EXT}/addons,${OE_HOME}/custom/addons\n' >> /etc/${OE_CONFIG}.conf"
 fi
@@ -274,184 +283,132 @@ sudo chown root: /etc/init.d/$OE_CONFIG
 echo -e "* Start ODOO on Startup"
 sudo update-rc.d $OE_CONFIG defaults
 
+#--------------------------------------------------
+# Install Nginx if needed
+#--------------------------------------------------
+if [ $INSTALL_NGINX = "True" ]; then
+    echo -e "\n---- Installing and setting up Nginx ----"
 
+    echo -e "\n---- Importing an official nginx signing key so apt could verify the packages authenticity ----"
+    curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor | sudo tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+
+    echo -e "\n---- Verifing that the downloaded file contains the proper key ----"
+    gpg --dry-run --quiet --no-keyring --import --import-options import-show /usr/share/keyrings/nginx-archive-keyring.gpg
+
+    echo -e "\n---- set up the apt repository for stable nginx packages ----"
+    echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu `lsb_release -cs` nginx" | sudo tee /etc/apt/sources.list.d/nginx.list
+
+    sudo apt update; sudo apt install nginx -y
+    sudo -H pip3 install certbot certbot-nginx
+
+
+  cat <<EOF > ~/odoo.conf
+  upstream odooserver {
+      server 127.0.0.1:$OE_PORT;
+  }
+  upstream odoolongpoll {
+      server 127.0.0.1:$LONGPOLLING_PORT;
+  }
+  server {
+  listen 80;
+
+  # set proper server name after domain set
+  server_name $WEBSITE_NAME;
+
+  # Add Headers for odoo proxy mode
+  proxy_set_header X-Forwarded-Host \$host;
+  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto \$scheme;
+  proxy_set_header X-Real-IP \$remote_addr;
+  add_header X-Frame-Options "SAMEORIGIN";
+  add_header X-XSS-Protection "1; mode=block";
+  proxy_set_header X-Client-IP \$remote_addr;
+  proxy_set_header HTTP_X_FORWARDED_HOST \$remote_addr;
+
+  #   odoo    log files
+  access_log  /var/log/nginx/$OE_USER-access.log;
+  error_log       /var/log/nginx/$OE_USER-error.log;
+
+  #   increase    proxy   buffer  size
+  proxy_buffers   16  64k;
+  proxy_buffer_size   128k;
+
+  proxy_read_timeout 900s;
+  proxy_connect_timeout 900s;
+  proxy_send_timeout 900s;
+
+  #   force   timeouts    if  the backend dies
+  proxy_next_upstream error   timeout invalid_header  http_500    http_502
+  http_503;
+
+  types {
+  text/less less;
+  text/scss scss;
+  }
+
+  #   enable  data    compression
+  gzip    on;
+  gzip_min_length 1100;
+  gzip_buffers    4   32k;
+  gzip_types  text/css text/less text/plain text/xml application/xml application/json application/javascript application/pdf image/jpeg image/png;
+  gzip_vary   on;
+  client_header_buffer_size 4k;
+  large_client_header_buffers 4 64k;
+  client_max_body_size 0;
+
+  location / {
+  proxy_pass http://odooserver;
+  # by default, do not forward anything
+  proxy_redirect off;
+  }
+
+  location /websocket {
+  proxy_pass http://odoolongpoll;
+  }
+  location ~* .(js|css|png|jpg|jpeg|gif|ico)$ {
+  expires 2d;
+  proxy_pass http://odooserver;
+  add_header Cache-Control "public, no-transform";
+  }
+  # cache some static data in memory for 60mins.
+  location ~ /[a-zA-Z0-9_-]*/static/ {
+  proxy_cache_valid 200 302 60m;
+  proxy_cache_valid 404      1m;
+  proxy_buffering    on;
+  expires 864000;
+  proxy_pass http://odooserver;
+  }
+  location /wait {
+  #proxy_pass http://odooserver;
+  proxy_cookie_path / "/; secure; HttpOnly; SameSite=None; Secure";
+  }
+  }
+EOF
+    
+    sudo mv ~/odoo.conf /etc/nginx/conf.d/
+    # sudo ln -s /etc/nginx/sites-available/odoo /etc/nginx/sites-enabled/odoo
+    sudo rm /etc/nginx/conf.d/default.conf
+    sudo service nginx reload
+    sudo su root -c "printf 'proxy_mode = True\n' >> /etc/${OE_CONFIG}.conf"
+    echo "Done! The Nginx server is up and running. Configuration can be found at /etc/nginx/conf.d/odoo.conf"
+else
+    echo "Nginx isn't installed due to choice of the user!"
+fi
 
 #--------------------------------------------------
-# Adding ODOO as a Modules (initscript)
+# Enable ssl with certbot
 #--------------------------------------------------
-echo -e "install odoo Modules"
-cd  $OE_HOME/custom
-if [ $OCA = "True" ]; then
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/account-analytic.git oca/account-analytic")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/account-budgeting.git oca/account-budgeting")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/account-closing.git oca/account-closing")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/account-consolidation.git oca/account-consolidation")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/account-financial-reporting.git oca/account-financial-reporting")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/account-financial-tools.git oca/account-financial-tools")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/account-fiscal-rule.git oca/account-fiscal-rule")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/account-invoice-reporting.git oca/account-invoice-reporting")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/account-invoicing.git oca/account-invoicing")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/account-payment.git oca/account-payment")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/account-reconcile.git oca/account-reconcile")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/bank-payment.git oca/bank-payment")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/bank-statement-import.git oca/bank-statement-import")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/commission.git oca/commission")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/community-data-files.git oca/community-data-files")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/connector.git oca/connector")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/connector-telephony.git oca/connector-telephony")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/contract.git oca/contract")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/credit-control.git oca/credit-control")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/crm.git oca/crm")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/currency.git oca/currency")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/data-protection.git oca/data-protection")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/ddmrp.git oca/ddmrp")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/delivery-carrier.git oca/delivery-carrier")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/e-commerce.git oca/e-commerce")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/edi.git oca/edi")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/event.git oca/event")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/field-service.git oca/field-service")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/geospatial.git oca/geospatial")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/hr.git oca/hr")
-  REPOS=( "${REPOS[@]}" "https://github.com/OCA/timesheet.git oca/timesheet")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/iot.git oca/iot")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/knowledge.git oca/knowledge")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/management-system.git oca/management-system")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/manufacture.git oca/manufacture")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/manufacture-reporting.git oca/manufacture-reporting")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/margin-analysis.git oca/margin-analysis")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/mis-builder.git oca/mis-builder")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/multi-company.git oca/multi-company")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/operating-unit.git oca/operating-unit")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/partner-contact.git oca/partner-contact")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/pos.git oca/pos")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/product-attribute.git oca/product-attribute")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/product-kitting.git oca/product-kitting")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/product-variant.git oca/product-variant")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/project.git oca/project")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/project-reporting.git oca/project-reporting")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/purchase-reporting.git oca/purchase-reporting")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/purchase-workflow.git oca/purchase-workflow")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/queue.git oca/queue")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/reporting-engine.git oca/reporting-engine")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/report-print-send.git oca/report-print-send")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/sale-financial.git oca/sale-financial")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/sale-reporting.git oca/sale-reporting")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/sale-workflow.git oca/sale-workflow")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/server-auth.git oca/server-auth")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/server-backend.git oca/server-backend")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/server-brand.git oca/server-brand")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/server-env.git oca/server-env")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/server-tools.git oca/server-tools")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/server-ux.git oca/server-ux")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/social.git oca/social")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/stock-logistics-barcode.git oca/stock-logistics-barcode")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/stock-logistics-reporting.git oca/stock-logistics-reporting")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/stock-logistics-tracking.git oca/stock-logistics-tracking")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/stock-logistics-transport.git oca/stock-logistics-transport")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/stock-logistics-warehouse.git oca/stock-logistics-warehouse")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/stock-logistics-workflow.git oca/stock-logistics-workflow")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/vertical-community.git oca/vertical-community")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/vertical-construction.git oca/vertical-construction")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/vertical-edition.git oca/vertical-edition")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/vertical-hotel.git oca/vertical-hotel")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/vertical-isp.git oca/vertical-isp")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/vertical-ngo.git oca/vertical-ngo")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/vertical-travel.git oca/vertical-travel")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/web.git oca/web")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/webkit-tools.git oca/webkit-tools")
-  REPOS=( "${REPOS[@]}" "https://github.com/oca/website.git oca/website")
-  REPOS=( "${REPOS[@]}" "https://github.com/OCA/storage.git oca/storage")
-  REPOS=( "${REPOS[@]}" "https://github.com/OCA/brand.git oca/brand")
-  REPOS=( "${REPOS[@]}" "https://github.com/OCA/rest-framework.git oca/rest-framework")
-  REPOS=( "${REPOS[@]}" "https://github.com/OCA/connector-jira.git oca/connector-jira")
-  REPOS=( "${REPOS[@]}" "https://github.com/OCA/search-engine.git oca/search-engine")
-  REPOS=( "${REPOS[@]}" "https://github.com/OCA/helpdesk.git oca/helpdesk")
-  REPOS=( "${REPOS[@]}" "https://github.com/OCA/product-pack.git oca/product-pack")
-  REPOS=( "${REPOS[@]}" "https://github.com/OCA/payroll.git oca/payroll")
-  REPOS=( "${REPOS[@]}" "https://github.com/OCA/wms.git oca/wms")
-  REPOS=( "${REPOS[@]}" "https://github.com/OCA/dms.git oca/dms")
 
+if [ $INSTALL_NGINX = "True" ] && [ $ENABLE_SSL = "True" ] && [ $ADMIN_EMAIL != "odoo@example.com" ]  && [ $WEBSITE_NAME != "_" ];then
+    sudo certbot --nginx -d $WEBSITE_NAME --noninteractive --agree-tos --email $ADMIN_EMAIL --redirect
+    sudo service nginx reload
+    echo "SSL/HTTPS is enabled!"
+else
+    echo "SSL/HTTPS isn't enabled due to choice of the user or because of a misconfiguration!"
+fi
 
-fi
-if [ $SAAS = "True" ]; then
-  REPOS=( "${REPOS[@]}" "https://github.com/it-projects-llc/e-commerce.git it-projects-llc/e-commerce")
-  REPOS=( "${REPOS[@]}" "https://github.com/it-projects-llc/pos-addons.git it-projects-llc/pos-addons")
-  REPOS=( "${REPOS[@]}" "https://github.com/it-projects-llc/access-addons.git it-projects-llc/access-addons")
-  REPOS=( "${REPOS[@]}" "https://github.com/it-projects-llc/website-addons.git it-projects-llc/website-addons")
-  REPOS=( "${REPOS[@]}" "https://github.com/it-projects-llc/misc-addons.git it-projects-llc/misc-addons")
-  REPOS=( "${REPOS[@]}" "https://github.com/it-projects-llc/mail-addons.git it-projects-llc/mail-addons")
-  REPOS=( "${REPOS[@]}" "https://github.com/it-projects-llc/odoo-saas-tools.git it-projects-llc/odoo-saas-tools")
-  REPOS=( "${REPOS[@]}" "https://github.com/it-projects-llc/odoo-telegram.git it-projects-llc/odoo-telegram")
-fi
-if [ $CybroOdoo = "True" ]; then
-  REPOS=( "${REPOS[@]}" "https://github.com/CybroOdoo/CybroAddons.git CybroOdoo/CybroAddons")
-  REPOS=( "${REPOS[@]}" "https://github.com/CybroOdoo/OpenHRMS.git CybroOdoo/OpenHRMS")
-fi
-if [ $MuKIT = "True" ]; then
-  REPOS=( "${REPOS[@]}" "https://github.com/muk-it/muk_base.git mukit/muk_base")
-  REPOS=( "${REPOS[@]}" "https://github.com/muk-it/muk_web.git mukit/muk_web")
-  REPOS=( "${REPOS[@]}" "https://github.com/muk-it/muk_bundles.git mukit/muk_bundles")
-  REPOS=( "${REPOS[@]}" "https://github.com/muk-it/muk_website.git mukit/muk_website")
-  REPOS=( "${REPOS[@]}" "https://github.com/muk-it/muk_misc.git mukit/muk_misc")
-  REPOS=( "${REPOS[@]}" "https://github.com/muk-it/muk_dms.git mukit/muk_dms")
-  REPOS=( "${REPOS[@]}" "https://github.com/muk-it/muk_docs.git mukit/muk_docs")
-  REPOS=( "${REPOS[@]}" "https://github.com/muk-it/muk_quality.git mukit/muk_quality")
-fi
-if [ $SythilTech = "True" ]; then
-  REPOS=( "${REPOS[@]}" "https://github.com/SythilTech/Odoo.git SythilTech/Odoo")
-fi
-if [ $odoomates = "True" ]; then
-  REPOS=( "${REPOS[@]}" "https://github.com/odoomates/odooapps.git odoomates/odooapps")
-fi
-if [ $openeducat = "True" ]; then
-  REPOS=( "${REPOS[@]}" "https://github.com/openeducat/openeducat_erp.git openeducat/openeducat_erp")
-fi
-if [ $JayVoraSerpentCS = "True" ]; then
-  REPOS=( "${REPOS[@]}" "https://github.com/JayVora-SerpentCS/OdooHotelManagementSystem.git JayVora-SerpentCS/OdooHotelManagementSystem")
-  REPOS=( "${REPOS[@]}" "https://github.com/JayVora-SerpentCS/SerpentCS_Contributions.git JayVora-SerpentCS/SerpentCS_Contributions")
-  REPOS=( "${REPOS[@]}" "https://github.com/JayVora-SerpentCS/Jasperreports_odoo.git JayVora-SerpentCS/Jasperreports_odoo")
-  REPOS=( "${REPOS[@]}" "https://github.com/JayVora-SerpentCS/MassEditing.git JayVora-SerpentCS/MassEditing")
-  REPOS=( "${REPOS[@]}" "https://github.com/JayVora-SerpentCS/fleet_management.git JayVora-SerpentCS/fleet_management")
-  REPOS=( "${REPOS[@]}" "https://github.com/JayVora-SerpentCS/DOST.git JayVora-SerpentCS/DOST")
-  REPOS=( "${REPOS[@]}" "https://github.com/JayVora-SerpentCS/Community_Portal.git JayVora-SerpentCS/Community_Portal")
-
-fi
-if [ $Openworx = "True" ]; then
-  REPOS=( "${REPOS[@]}" "https://github.com/Openworx/odoo-addons.git Openworx/odoo-addons")
-  REPOS=( "${REPOS[@]}" "https://github.com/Openworx/backend_theme.git Openworx/backend_theme")
-fi
- if [[ "${REPOS}" != "" ]]
- then
-     apt-get install -y git
- fi
-
- for r in "${REPOS[@]}"
- do
-     eval "git clone --depth=1 -b ${OE_VERSION} $r" || echo "Cannot clone: git clone -b ${OE_VERSION} $r"
- done
-
- if [[ "${REPOS}" != "" ]]
- then
-     chown -R ${OE_USER}:${OE_USER} $OE_HOME/custom || true
- fi
-      ADDONS_PATH=`ls -d1 /odoo/custom/*/* | tr '\n' ','`
-      ADDONS_PATH=`echo /odoo/odoo-server/addons,/odoo/custom/addons,$ADDONS_PATH | sed "s,//,/,g" | sed "s,/,\\\\\/,g" | sed "s,.$,,g" `
-     sed -ibak "s/addons_path.*/addons_path = $ADDONS_PATH/" /etc/odoo-server.conf
-
-echo -e "install odoo requirements"
- sudo pip3 install wheel
- #sudo apt install libldap2-dev libsasl2-dev
- #sudo pip3 install pyldap
- #sudo pip3 install -r /$OE_USER/$OE_CONFIG/requirements.txt
- #sudo pip3 install configparser
- #sudo pip3 install future
- #pip3 install num2words
- #pip3 install PyXB
- #pip3 install mysql-connector-python
- #pip3 install -r oca/account-analytic/requirements.txt
- #pip3 install -r oca/account-budgeting/requirements.txt
- 
-
+sudo -H pip3 install pyOpenSSL==21.0.0
+sudo -H pip3 install cryptography==36.0.2
 
 echo -e "* Starting Odoo Service"
 sudo su root -c "/etc/init.d/$OE_CONFIG start"
@@ -463,12 +420,12 @@ echo "Configuraton file location: /etc/${OE_CONFIG}.conf"
 echo "Logfile location: /var/log/$OE_USER"
 echo "User PostgreSQL: $OE_USER"
 echo "Code location: $OE_USER"
-echo "Addons folder: $OE_USER/$OE_CONFIG/addons/"
+echo "Addons folder: /$OE_USER/custom/addons/"
 echo "Password superadmin (database): $OE_SUPERADMIN"
 echo "Start Odoo service: sudo service $OE_CONFIG start"
 echo "Stop Odoo service: sudo service $OE_CONFIG stop"
 echo "Restart Odoo service: sudo service $OE_CONFIG restart"
 if [ $INSTALL_NGINX = "True" ]; then
-  echo "Nginx configuration file: /etc/nginx/sites-available/odoo"
+    echo "Nginx configuration file: /etc/nginx/conf.d/odoo.conf"
 fi
 echo "-----------------------------------------------------------"
